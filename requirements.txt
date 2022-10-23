@@ -6,4 +6,3 @@ aiodns>=3.0.0
 aiohttp[speedups]>=3.7.4
 apscheduler>=3.6.3
 librouteros>=3.2.1
-aiogram-dialog>=1.9.0
