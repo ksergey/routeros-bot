@@ -8,6 +8,7 @@
 mkdir -p ~/.config/systemd/user/
 
 if [ ! -f "${HOME}/routeros-bot.service" ]; then
+  echo creating default config
   # copy config example to "${HOME}/routeros-bot.service"
 fi
 
