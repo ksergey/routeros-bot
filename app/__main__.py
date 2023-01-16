@@ -43,31 +43,32 @@ async def check_leases():
 
         table.sort(key=lambda elem: ipaddress.IPv4Address(elem['address']))
 
-        for element in table:
-            if element not in leasesTable:
-                address = element['address']
-                mac = element['mac-address']
-                host = element['host-name']
-                message = [
-                    f'new host appears:',
-                    f' address: {address}',
-                    f' mac-address: {mac}',
-                    f' host-name: {host}'
-                ]
-                await bot.send_message(config.telegram.chat_id, '\n'.join(message), reply_markup=ReplyKeyboardRemove())
+        if leasesTable:
+            for element in table:
+                if element not in leasesTable:
+                    address = element['address']
+                    mac = element['mac-address']
+                    host = element['host-name']
+                    message = [
+                        f'new host appears:',
+                        f' address: {address}',
+                        f' mac-address: {mac}',
+                        f' host-name: {host}'
+                    ]
+                    await bot.send_message(config.telegram.chat_id, '\n'.join(message), reply_markup=ReplyKeyboardRemove())
 
-        for element in leasesTable:
-            if element not in table:
-                address = element['address']
-                mac = element['mac-address']
-                host = element['host-name']
-                message = [
-                    f'host leaved:',
-                    f' address: {address}',
-                    f' mac-address: {mac}',
-                    f' host-name: {host}'
-                ]
-                await bot.send_message(config.telegram.chat_id, '\n'.join(message), reply_markup=ReplyKeyboardRemove())
+            for element in leasesTable:
+                if element not in table:
+                    address = element['address']
+                    mac = element['mac-address']
+                    host = element['host-name']
+                    message = [
+                        f'host leaved:',
+                        f' address: {address}',
+                        f' mac-address: {mac}',
+                        f' host-name: {host}'
+                    ]
+                    await bot.send_message(config.telegram.chat_id, '\n'.join(message), reply_markup=ReplyKeyboardRemove())
 
         leasesTable = table
 
