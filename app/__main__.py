@@ -25,64 +25,12 @@ COMMANDS = [
     BotCommand('help', 'show help message')
 ]
 
-checkLeasesTask = None
-leasesTable = []
-
-async def check_leases():
-    global leasesTable
-
-    while True:
-        result = api.path('ip', 'dhcp-server', 'lease')
-        table = []
-        for item in result:
-            table.append({
-                'address': item.get('address'),
-                'mac-address': item.get('mac-address'),
-                'host-name': item.get('host-name')
-            })
-
-        table.sort(key=lambda elem: ipaddress.IPv4Address(elem['address']))
-
-        if leasesTable:
-            for element in table:
-                if element not in leasesTable:
-                    address = element['address']
-                    mac = element['mac-address']
-                    host = element['host-name']
-                    message = [
-                        f'new host appears:',
-                        f' address: {address}',
-                        f' mac-address: {mac}',
-                        f' host-name: {host}'
-                    ]
-                    await bot.send_message(config.telegram.chat_id, '\n'.join(message), reply_markup=ReplyKeyboardRemove())
-
-            for element in leasesTable:
-                if element not in table:
-                    address = element['address']
-                    mac = element['mac-address']
-                    host = element['host-name']
-                    message = [
-                        f'host leaved:',
-                        f' address: {address}',
-                        f' mac-address: {mac}',
-                        f' host-name: {host}'
-                    ]
-                    await bot.send_message(config.telegram.chat_id, '\n'.join(message), reply_markup=ReplyKeyboardRemove())
-
-        leasesTable = table
-
-        await asyncio.sleep(60 * 5)
-
 async def startup(dp: Dispatcher):
     await bot.set_my_commands(commands=COMMANDS)
     await bot.send_message(config.telegram.chat_id, 'hello', reply_markup=ReplyKeyboardRemove())
 
-    global checkLeasesTask
-    checkLeasesTask = asyncio.create_task(check_leases())
-
 async def shutdown(dp: Dispatcher):
-    checkLeasesTask.cancel()
+    pass
 
 def firewall_rules():
     return api.path('ip', 'firewall', 'filter')
