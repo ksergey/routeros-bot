@@ -18,23 +18,44 @@ class RouterOSConfig:
     password: str
 
 @dataclass
-class RulesConfig:
-    match_comment: List[str]
+class CommandConfig:
+    name: str
+    description: str
+    path: str
+    match: Dict
 
 @dataclass
 class Config:
     telegram: TelegramConfig
     router_os: RouterOSConfig
-    rules: RulesConfig
+    commands: List[CommandConfig]
 
-def parse_list(value: str) -> List[str]:
-    if str is None:
-        return None
-    return [item for item in value.split(', ')]
+def make_command(name, description, path_str) -> CommandConfig:
+    path_split = path_str.split('/')
+
+    path = '/'.join(path_split[:-1])
+
+    entry_match_expr = path_split[-1]
+    if entry_match_expr.startswith('{') == False or entry_match_expr.endswith('}') == False:
+        raise Exception('invalid path match expression')
+
+    match = {}
+    for entry in entry_match_expr[1:-1].split(','):
+        key, value = entry.split('=', maxsplit=1)
+        match[key] = value
+
+    return CommandConfig(name=name, description=description, path=path, match=match)
 
 def load_config() -> Config:
     parser = ConfigParser()
     parser.read(args.config)
+
+    commands = []
+    for section in parser.sections():
+        if not section.startswith('command '):
+            continue
+        command = make_command(section[len('command '):], parser[section].get('description'), parser[section].get('path'))
+        commands.append(command)
 
     config = Config(
         telegram = TelegramConfig(
@@ -46,9 +67,7 @@ def load_config() -> Config:
             user = parser.get('router_os', 'user'),
             password = parser.get('router_os', 'password')
         ),
-        rules = RulesConfig(
-            match_comment = parse_list(parser.get('rules', 'match_comment'))
-        )
+        commands = commands
     )
 
     return config

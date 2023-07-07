@@ -6,8 +6,10 @@ from aiogram.types import ParseMode, Message, BotCommand, CallbackQuery, ReplyKe
 from aiogram.utils import executor
 from aiogram import Bot, Dispatcher
 
+from librouteros import connect
+from librouteros.query import Key
+
 from app.config import config
-from app.router_os import RouterOS
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
@@ -17,8 +19,6 @@ logger = logging.getLogger(__name__)
 
 bot = Bot(token=config.telegram.token, parse_mode=ParseMode.HTML)
 dp = Dispatcher(bot)
-
-api = RouterOS(host=config.router_os.host, user=config.router_os.user, password=config.router_os.password)
 
 COMMANDS = [
     BotCommand('list', 'list available rules'),
@@ -32,21 +32,37 @@ async def startup(dp: Dispatcher):
 async def shutdown(dp: Dispatcher):
     pass
 
-def firewall_rules():
-    return api.path('ip', 'firewall', 'filter')
+def router_os_api():
+    return connect(username=config.router_os.user, password=config.router_os.password, host=config.router_os.host)
 
-def make_rules_keyboard():
+def make_rules_keyboard(connection=None):
+    key_id = Key('.id')
+    key_disabled = Key('disabled')
+
     keyboard = InlineKeyboardMarkup()
-    for rule in firewall_rules():
-        comment = rule.get('comment')
-        if comment in config.rules.match_comment:
-            id = rule.get('.id')
-            state = 'OFF' if rule.get('disabled') == True else 'ON'
-            next_state = 'enable' if rule.get('disabled') == True else 'disable'
-            keyboard.row(
-                InlineKeyboardButton(f'blocking {comment}', callback_data=f'{id},none'),
-                InlineKeyboardButton(state, callback_data=f'{id},{next_state}')
-            )
+
+    if connection:
+        api = connection
+    else:
+        api = router_os_api()
+
+    for command in config.commands:
+        match_expr = [ Key(key) == command.match[key] for key in command.match ]
+        data = api.path(command.path).select(Key('.id'), Key('disabled')).where(*match_expr)
+        data = tuple(data)[0]
+
+        value_id = data['.id']
+        value_state = 'off' if data['disabled'] == True else 'on'
+        value_next_state = 'on' if data['disabled'] == True else 'off'
+
+        keyboard.row(
+            InlineKeyboardButton(command.description, callback_data=f'{command.path},{value_id},none'),
+            InlineKeyboardButton(value_state, callback_data=f'{command.path},{value_id},{value_next_state}')
+        )
+
+    if not connection:
+        api.close()
+
     return keyboard
 
 @dp.message_handler(commands=['help'], chat_id=config.telegram.chat_id)
@@ -60,15 +76,24 @@ async def command_list_rules(message: Message):
 
 @dp.callback_query_handler(chat_id=config.telegram.chat_id)
 async def callback_handler(query: CallbackQuery):
-    id, action = query.data.split(',')
-    if action == 'none':
+    path, value_id, value_next_state = query.data.split(',')
+
+    if value_next_state == 'none':
         return
-    if action == 'enable':
-        firewall_rules().update(**{ 'disabled': False, '.id': id })
-    if action == 'disable':
-        firewall_rules().update(**{ 'disabled': True, '.id': id })
+
+    api = router_os_api()
+
+    if value_next_state == 'on':
+        api.path(path).update(**{ 'disabled': False, '.id': value_id })
+
+    if value_next_state == 'off':
+        api.path(path).update(**{ 'disabled': True, '.id': value_id })
+
+
     await query.answer('done')
-    await bot.send_message(text='rules list', reply_markup=make_rules_keyboard(), chat_id=config.telegram.chat_id)
+    await bot.send_message(text='rules list', reply_markup=make_rules_keyboard(api), chat_id=config.telegram.chat_id)
+
+    api.close()
 
 if __name__ == '__main__':
     try:
