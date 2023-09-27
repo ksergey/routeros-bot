@@ -19,7 +19,7 @@ class RouterOSConfig:
 
 @dataclass
 class CommandConfig:
-    name: str
+    router: str
     description: str
     path: str
     match: Dict
@@ -27,13 +27,17 @@ class CommandConfig:
 @dataclass
 class Config:
     telegram: TelegramConfig
-    router_os: RouterOSConfig
-    commands: List[CommandConfig]
+    routers: Dict[str,RouterOSConfig]
+    commands: Dict[str,CommandConfig]
 
-def make_command(name, description, path_str) -> CommandConfig:
+def make_command(description, path_str) -> CommandConfig:
     path_split = path_str.split('/')
 
-    path = '/'.join(path_split[:-1])
+    path = '/'.join(path_split[1:-1])
+
+    router_name = path_split[0]
+    if router_name.startswith('{') == False or router_name.endswith('}') == False:
+        raise Exception('invalid router name expression')
 
     entry_match_expr = path_split[-1]
     if entry_match_expr.startswith('{') == False or entry_match_expr.endswith('}') == False:
@@ -44,29 +48,42 @@ def make_command(name, description, path_str) -> CommandConfig:
         key, value = entry.split('=', maxsplit=1)
         match[key] = value
 
-    return CommandConfig(name=name, description=description, path=path, match=match)
+    return CommandConfig(router=router_name[1:-1], description=description, path=path, match=match)
 
 def load_config() -> Config:
     parser = ConfigParser()
     parser.read(args.config)
 
-    commands = []
+    routers = {}
+    for section in parser.sections():
+        if not section.startswith('router '):
+            continue
+        router = RouterOSConfig(
+            host = parser[section].get('host'),
+            user = parser[section].get('user'),
+            password = parser[section].get('password')
+        )
+        name = section[len('router '):]
+        routers[name] = router
+
+    commands = {}
     for section in parser.sections():
         if not section.startswith('command '):
             continue
-        command = make_command(section[len('command '):], parser[section].get('description'), parser[section].get('path'))
-        commands.append(command)
+        command = make_command(parser[section].get('description'), parser[section].get('path'))
+        name = section[len('command '):]
+        commands[name] = command
+
+    for _, command in commands.items():
+        if not command.router in routers:
+            raise Exception(f'router "{command.router}" not found')
 
     config = Config(
         telegram = TelegramConfig(
             token = parser.get('telegram', 'token'),
             chat_id = parser.get('telegram', 'chat_id')
         ),
-        router_os = RouterOSConfig(
-            host = parser.get('router_os', 'host'),
-            user = parser.get('router_os', 'user'),
-            password = parser.get('router_os', 'password')
-        ),
+        routers = routers,
         commands = commands
     )
 
